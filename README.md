@@ -109,6 +109,7 @@ unzip Flickr8k_text.zip -d Flickr8k_text/
 # GloVe embeddings
 wget http://nlp.stanford.edu/data/glove.6B.zip
 unzip glove.6B.zip
+```
 
 
 Usage
