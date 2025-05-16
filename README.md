@@ -1,112 +1,142 @@
-# Image Captioning with Flickr8k, ResNet50, and GRU
+# TensorFlow Image Captioning with ResNet50 and GRU on Flickr8k
 
-This project implements an image captioning model using the Flickr8k dataset. It employs a pre-trained ResNet50 model as the image feature extractor (encoder) and a GRU-based network as the caption generator (decoder). Two variants are explored:
+This project demonstrates how to build, train, and evaluate an image captioning model using TensorFlow and Keras. The model utilizes a pre-trained ResNet50 for image feature extraction and a GRU-based decoder for generating captions. The training and evaluation are performed on the Flickr8k dataset, with GloVe pre-trained word embeddings used to initialize the caption embedding layer.
 
-1. **Not Fine-Tuned**: ResNet50 encoder’s weights are frozen.  
-2. **Fine-Tuned**: Layers from `conv5_block1_out` onward in ResNet50 are unfrozen and jointly trained with the decoder.
+The primary code and workflow are contained within the Jupyter Notebook.
 
----
+## Overview
 
-## Table of Contents
-
-1. [Project Overview](#project-overview)  
-2. [Features](#features)  
-3. [Dataset & Pre-trained Embeddings](#dataset--pre-trained-embeddings)  
-4. [Model Architecture](#model-architecture)  
-5. [Setup & Installation](#setup--installation)  
-   - [Prerequisites](#prerequisites)  
-   - [Dependencies](#dependencies)  
-   - [Data Download & Preparation](#data-download--preparation)  
-6. [Usage](#usage)  
-7. [Code Structure Highlights](#code-structure-highlights)  
-8. [Evaluation Metrics](#evaluation-metrics)  
-9. [Results Summary](#results-summary)  
-10. [Sample Outputs](#sample-outputs)  
-11. [Potential Future Work](#potential-future-work)  
-
----
-
-## Project Overview
-
-Automatically generate textual captions for images using an encoder–decoder framework:
-
-- **Encoder**: Pre-trained ResNet50 (ImageNet) → feature maps → GAP → Dense → image context vector.  
-- **Decoder**: GRU network with GloVe embeddings, conditioned on image context to predict next word.
-
----
-
-## Features
-
-- Caption preprocessing: tokenization, padding, `<start>`/`<end>` tokens.  
-- Image resizing & preprocessing for ResNet50.  
-- GloVe (6B.100d) word embeddings integration.  
-- Dual-model training (frozen vs. fine-tuned encoder).  
-- Evaluation: BLEU, perplexity (loss), token-level accuracy, cosine similarity.  
-- Visualization: cosine similarity distributions, side-by-side caption comparisons.
-
----
+The notebook covers the following key steps:
+1.  **Data Download & Setup**: Instructions and commented-out commands for downloading the Flickr8k dataset (images and text) and GloVe embeddings.
+2.  **Data Loading & Preprocessing**:
+    *   Loading image captions from `Flickr8k.token.txt`.
+    *   Associating images with their captions.
+    *   Preprocessing captions: lowercasing, removing short words, adding `<start>` and `<end>` tokens.
+    *   Splitting data into training and testing sets based on unique image IDs.
+3.  **Image Preprocessing**:
+    *   Resizing all images to a consistent size (224x224).
+    *   Saving resized images to a separate directory to speed up subsequent runs.
+4.  **Text Tokenization**:
+    *   Creating a vocabulary from the training captions using `tensorflow.keras.preprocessing.text.Tokenizer`.
+    *   Padding sequences to a maximum length.
+5.  **Custom Data Generator**:
+    *   Implementing an `ImageCaptioningDataGenerator` (subclassing `tensorflow.keras.utils.Sequence`) to efficiently load and preprocess data in batches for training. This handles image loading, feature extraction (via ResNet50's `preprocess_input`), and caption tokenization.
+6.  **Word Embeddings**:
+    *   Loading pre-trained GloVe (glove.6B.100d.txt) word vectors.
+    *   Creating an embedding matrix to initialize the model's embedding layer.
+7.  **Model Architecture (Encoder-Decoder)**:
+    *   **Encoder**: Pre-trained ResNet50 (with top layer removed) to extract image features. The base ResNet layers are initially frozen, with an option to unfreeze later layers (`conv5_block1_out` onwards) for fine-tuning.
+    *   **Decoder**:
+        *   An `Embedding` layer for input captions, initialized with GloVe embeddings.
+        *   A `GRU` layer to process the sequential caption data.
+        *   `Dense` layers to produce the final probability distribution over the vocabulary.
+8.  **Model Training**:
+    *   Two model variants are trained and compared:
+        *   **`fine_tuned_model`**: ResNet50 base is partially trainable (from `conv5_block1_out`), and the Embedding layer is trainable.
+        *   **`not_fine_tuned_model`**: ResNet50 base is entirely frozen, and the Embedding layer is frozen (not trainable).
+    *   Models are compiled with Adam optimizer and sparse categorical cross-entropy loss.
+    *   Training is performed for a set number of epochs.
+    *   Model weights are saved after training.
+9.  **Caption Generation & Evaluation**:
+    *   Function to generate captions for new images using the trained models.
+    *   **BLEU Score**: `corpus_bleu` from NLTK is used to evaluate the quality of generated captions against reference captions on the test set.
+    *   **Inference Loss & Accuracy**: Custom functions to compute the loss and token-level accuracy on the test set.
+    *   **Cosine Similarity**: Calculating the cosine similarity between the GloVe embeddings of generated and real captions.
+    *   Visualization of similarity distributions.
+10. **Qualitative Results**:
+    *   Displaying sample images with their real captions alongside captions generated by both the fine-tuned and non-fine-tuned models.
 
 ## Dataset & Pre-trained Embeddings
 
-- **Flickr8k Dataset**  
-  - 8,000 images with 5 captions each.  
-  - Captions file: `Flickr8k.token.txt`.  
-  - Images archive: `Flickr8k_Dataset.zip`.  
+*   **Flickr8k Dataset**:
+    *   Images: `Flickr8k_Dataset.zip`
+    *   Text (captions): `Flickr8k_text.zip`
+    *   Download links (from jbrownlee's GitHub):
+        *   `https://github.com/jbrownlee/Datasets/releases/download/Flickr8k/Flickr8k_Dataset.zip`
+        *   `https://github.com/jbrownlee/Datasets/releases/download/Flickr8k/Flickr8k_text.zip`
+*   **GloVe Word Embeddings**:
+    *   `glove.6B.zip` (specifically `glove.6B.100d.txt` is used)
+    *   Download link (from Stanford NLP): `http://nlp.stanford.edu/data/glove.6B.zip`
 
-- **GloVe 6B (100d)**  
-  - 100-dim vectors over 6B tokens: `glove.6B.100d.txt`.
+The notebook includes commented-out `wget` and `unzip` commands in the initial cells for fetching these files if run in an environment like Google Colab.
 
----
+## Setup
 
-## Model Architecture
+1.  **Clone the repository (if applicable):**
+    ```bash
+    git clone https://github.com/your-username/tensorflow-image-captioning-flickr8k.git
+    cd tensorflow-image-captioning-flickr8k
+    ```
 
-1. **Image Encoder (ResNet50)**  
-   - Input: `(224, 224, 3)`  
-   - `include_top=False`, GlobalAveragePooling2D  
-   - Dense → image context vector (e.g., 1024 dims)
+2.  **Create a Python virtual environment (recommended):**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
 
-2. **Caption Decoder (GRU)**  
-   - Embedding layer (initialized with GloVe, `mask_zero=True`)  
-   - GRU (`units=1024`, `return_sequences=True`)  
-   - Dropout for regularization  
-   - TimeDistributed Dense (1024) → TimeDistributed Dense (vocab size, `softmax`)
+3.  **Install dependencies:**
+    The notebook imports the following. You can install them via pip:
+    ```bash
+    pip install numpy pandas tqdm matplotlib Pillow scikit-learn nltk tensorflow gensim
+    ```
+    Ensure TensorFlow is version 2.x (the notebook seems compatible with TF 2.6+ based on `keras` imports from `tensorflow.keras`).
 
----
+4.  **Download Datasets and Embeddings:**
+    *   Download Flickr8k images and text, and GloVe embeddings using the links above.
+    *   Extract them. The notebook expects a structure like:
+        ```
+        .
+        ├── (Your Notebook File.ipynb)
+        ├── Flickr8k_text/
+        │   └── Flickr8k.token.txt
+        ├── Flickr8k_Dataset/
+        │   └── Flicker8k_Dataset/  # Contains JPG image files
+        ├── glove.6B.100d.txt
+        └── resized_images/         # This directory will be created by the script
+        └── sample_images/          # Contains sample images for final display
+        ```
+    *   **Important**: The notebook uses hardcoded local paths (e.g., `r'C:\Users\Essam\Desktop\...'`). You **MUST** update these paths in cell `[4]` and potentially other cells (like `IMAGE_FOLDER` in cell `[38]`) to match where you've stored the data on your system.
 
-## Setup & Installation
+5.  **GPU (Recommended for Training):**
+    Ensure you have a compatible GPU and an appropriate version of CUDA/cuDNN installed if you want to train models efficiently.
 
-### Prerequisites
+## Usage
 
-- Python 3.7+  
-- `pip`  
-- (Optional) NVIDIA GPU with CUDA & cuDNN
+1.  **Modify Paths**: Before running, ensure all file paths in the notebook (especially in cell `[4]` for `captions_file`, `photos_dir`, `resized_dir` and cell `[38]` for `IMAGE_FOLDER`) are correctly set to your local environment.
+2.  **Open and run the Jupyter Notebook**:
+    ```bash
+    jupyter notebook <your_notebook_name>.ipynb
+    ```
+    Execute the cells sequentially.
+    *   The first run will involve resizing all ~8000 images, which can take some time. Subsequent runs will be faster as they use the pre-resized images.
+    *   Training both model variants will also be time-consuming, especially on a CPU.
 
-### Dependencies
+## Model Variants & Key Findings (from the notebook run)
 
-Create a `requirements.txt`:
+Two main model configurations are explored:
 
-```text
-numpy
-pandas
-tqdm
-matplotlib
-gensim
-Pillow
-scikit-learn
-nltk
-tensorflow>=2.6.0      # or tensorflow-gpu
+1.  **`fine_tuned_model`**:
+    *   ResNet50: Trainable from `conv5_block1_out` layer onwards.
+    *   Embedding Layer: Trainable, initialized with GloVe.
+    *   BLEU Score: ~0.1141
+    *   Inference Loss: ~8.9497
+    *   Inference Accuracy: ~0.0354
+    *   Average Cosine Similarity: ~0.8823
 
-pip install -r requirements.txt
+2.  **`not_fine_tuned_model`**:
+    *   ResNet50: All layers frozen.
+    *   Embedding Layer: Frozen (not trainable), initialized with GloVe.
+    *   BLEU Score: ~0.1213
+    *   Inference Loss: ~8.8255
+    *   Inference Accuracy: ~0.0185
+    *   Average Cosine Similarity: ~0.8857
 
-# Images
-wget https://github.com/jbrownlee/Datasets/releases/download/Flickr8k/Flickr8k_Dataset.zip
-unzip Flickr8k_Dataset.zip -d Flickr8k_Dataset/
+Interestingly, in this particular run, the `not_fine_tuned_model` showed slightly better BLEU and Cosine Similarity, though its token-level accuracy and loss were worse. This suggests that allowing the embedding layer and parts of ResNet to train (`fine_tuned_model`) helped in learning a better token prediction objective (lower loss, higher accuracy) but might have slightly drifted from the global semantic similarity captured by fixed GloVe embeddings for this specific test set and evaluation. Further experiments and hyperparameter tuning would be needed for more conclusive results.
 
-# Captions
-wget https://github.com/jbrownlee/Datasets/releases/download/Flickr8k/Flickr8k_text.zip
-unzip Flickr8k_text.zip -d Flickr8k_text/
+## Saved Models
 
-# GloVe embeddings
-wget http://nlp.stanford.edu/data/glove.6B.zip
-unzip glove.6B.zip
-```
+The notebook saves the weights for both models:
+*   `image_captioning_model_weights_fine_tuned.h5`
+*   `image_captioning_model_weights_not_finetuned.h5`
+
+These can be loaded later for inference or further training.
